@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🛡️ 관리자 패널 - BioSecure Palm</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Exo+2:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Exo 2', sans-serif;
+            background: linear-gradient(135deg, #0c0c0c 0%, #1a1a2e 50%, #16213e 100%);
+            min-height: 100vh;
+            color: #fff;
+            overflow-x: hidden;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        /* 헤더 */
+        .header {
+            text-align: center;
+            padding: 30px 0;
+            animation: fadeInDown 1s ease-out;
+        }
+
+        .logo {
+            font-family: 'Orbitron', monospace;
+            font-size: 2.5rem;
+            font-weight: 900;
+            background: linear-gradient(45deg, #ff6b6b, #4ecdc4);
+            background-size: 300% 300%;
+            animation: gradientShift 3s ease-in-out infinite;
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 10px;
+        }
+
+        @keyframes gradientShift {
+            0%, 100% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+        }
+
+        .page-title {
+            font-size: 1.5rem;
+            color: #a0a0a0;
+            font-weight: 300;
+            letter-spacing: 2px;
+        }
+
+        /* 대시보드 그리드 */
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 30px;
+            margin: 40px 0;
+        }
+
+        .dashboard-card {
+            background: rgba(0, 0, 0, 0.4);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 107, 107, 0.3);
+            border-radius: 20px;
+            padding: 30px;
+            transition: all 0.3s ease;
+            animation: fadeInUp 1s ease-out;
+        }
+
+        .dashboard-card:hover {
+            transform: translateY(-5px);
+            border-color: rgba(255, 107, 107, 0.6);
+            box-shadow: 0 10px 30px rgba(255, 107, 107, 0.2);
+        }
+
+        .card-title {
+            font-family: 'Orbitron', monospace;
+            font-size: 1.3rem;
+            color: #ff6b6b;
+            margin-bottom: 20px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        /* 사용자 목록 */
+        .users-container {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .user-item {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: all 0.3s ease;
+        }
+
+        .user-item:hover {
+            background: rgba(255, 255, 255, 0.15);
+            border-color: #ff6b6b;
+        }
+
+        .user-info {
+            flex-grow: 1;
+        }
+
+        .user-name {
+            font-weight: 600;
+            font-size: 1.1rem;
+            color: #4ecdc4;
+            margin-bottom: 5px;
+        }
+
+        .user-details {
+            font-size: 0.9rem;
+            color: #a0a0a0;
+        }
+
+        .user-actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .btn-danger {
+            background: #ff6b6b;
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #ff5252;
+            transform: scale(1.05);
+        }
+
+        .btn-info {
+            background: #4ecdc4;
+            color: white;
+        }
+
+        .btn-info:hover {
+            background: #26d0ce;
+            transform: scale(1.05);
+        }
+
+        .btn-primary {
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            color: white;
+            margin: 10px 5px;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        /* 통계 표시 */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .stat-item {
+            text-align: center;
+            padding: 15px;
+            background: rgba(0, 0, 0, 0.6);
+            border-radius: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .stat-value {
+            font-family: 'Orbitron', monospace;
+            font-size: 1.8rem;
+            font-weight: 700;
+            color: #4ecdc4;
+            margin-bottom: 5px;
+        }
+
+        .stat-label {
+            font-size: 0.8rem;
+            color: #a0a0a0;
+            text-transform: uppercase;
+        }
+
+        /* 로딩 상태 */
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #a0a0a0;
+        }
+
+        .loading::after {
+            content: '...';
+            animation: loading 1.5s infinite;
+        }
+
+        @keyframes loading {
+            0%, 20% { opacity: 0; }
+            50% { opacity: 1; }
+            100% { opacity: 0; }
+        }
+
+        /* 홈 버튼 */
+        .home-btn {
+            display: inline-block;
+            background: rgba(108, 117, 125, 0.8);
+            color: #fff;
+            padding: 15px 30px;
+            border-radius: 12px;
+            text-decoration: none;
+            font-family: 'Orbitron', monospace;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            transition: all 0.3s ease;
+            margin: 20px 0;
+        }
+
+        .home-btn:hover {
+            background: rgba(108, 117, 125, 1);
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(108, 117, 125, 0.3);
+        }
+
+        /* 애니메이션 */
+        @keyframes fadeInDown {
+            from { opacity: 0; transform: translateY(-30px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(30px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* 반응형 */
+        @media (max-width: 768px) {
+            .dashboard-grid {
+                grid-template-columns: 1fr;
+                gap: 20px;
+            }
+            
+            .user-item {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 15px;
+            }
+            
+            .user-actions {
+                width: 100%;
+                justify-content: space-between;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <div class="logo">BioSecure Palm</div>
+            <div class="page-title">ADMINISTRATOR PANEL</div>
+        </header>
+
+        <!-- 시스템 통계 -->
+        <div class="dashboard-card">
+            <div class="card-title">🏛️ 시스템 통계</div>
+            <div class="stats-grid" id="system-stats">
+                <div class="loading">시스템 통계 로딩 중</div>
+            </div>
+        </div>
+
+        <div class="dashboard-grid">
+            <!-- 사용자 관리 -->
+            <div class="dashboard-card">
+                <div class="card-title">👥 사용자 관리</div>
+                <div class="users-container" id="users-list">
+                    <div class="loading">사용자 목록 로딩 중</div>
+                </div>
+                <button class="btn btn-primary" onclick="refreshUsers()">🔄 새로고침</button>
+            </div>
+
+            <!-- 관리 기능 -->
+            <div class="dashboard-card">
+                <div class="card-title">🔧 관리 기능</div>
+                <button class="btn btn-primary" onclick="showSimilarityMatrix()">📊 유사도 매트릭스</button>
+                <button class="btn btn-primary" onclick="exportSystemData()">💾 데이터 내보내기</button>
+                <button class="btn btn-primary" onclick="systemDiagnostics()">🔍 시스템 진단</button>
+            </div>
+        </div>
+
+        <div style="text-align: center;">
+            <a href="{{ url_for('home') }}" class="home-btn">🏠 홈으로</a>
+        </div>
+    </div>
+
+    <script>
+        // 페이지 로드 시 초기화
+        document.addEventListener('DOMContentLoaded', function() {
+            loadSystemStats();
+            loadUsers();
+        });
+
+        // 시스템 통계 로드
+        function loadSystemStats() {
+            fetch('/admin/stats')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        const stats = data.stats;
+                        document.getElementById('system-stats').innerHTML = `
+                            <div class="stat-item">
+                                <div class="stat-value">${stats.total_users}</div>
+                                <div class="stat-label">등록 사용자</div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-value">${stats.success_rate}%</div>
+                                <div class="stat-label">인증 성공률</div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-value">${stats.total_auth_attempts}</div>
+                                <div class="stat-label">총 인증 시도</div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-value">${stats.successful_auths}</div>
+                                <div class="stat-label">성공한 인증</div>
+                            </div>
+                        `;
+                    }
+                })
+                .catch(error => {
+                    document.getElementById('system-stats').innerHTML = 
+                        '<div class="loading">통계 로드 실패</div>';
+                });
+        }
+
+        // 사용자 목록 로드
+        function loadUsers() {
+            fetch('/admin/users')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        const usersList = document.getElementById('users-list');
+                        
+                        if (data.users.length === 0) {
+                            usersList.innerHTML = '<div class="loading">등록된 사용자가 없습니다</div>';
+                            return;
+                        }
+
+                        usersList.innerHTML = data.users.map(user => `
+                            <div class="user-item">
+                                <div class="user-info">
+                                    <div class="user-name">${user.name}</div>
+                                    <div class="user-details">
+                                        ID: ${user.id} | 등록일: ${user.registration_date}<br>
+                                        임베딩 크기: ${user.embedding_size} bytes
+                                    </div>
+                                </div>
+                                <div class="user-actions">
+                                    <button class="btn btn-info" onclick="showSimilarity(${user.id})">📊</button>
+                                    <button class="btn btn-danger" onclick="deleteUser(${user.id}, '${user.name}')">🗑️</button>
+                                </div>
+                            </div>
+                        `).join('');
+                    }
+                })
+                .catch(error => {
+                    document.getElementById('users-list').innerHTML = 
+                        '<div class="loading">사용자 목록 로드 실패</div>';
+                });
+        }
+
+        // 사용자 삭제
+        function deleteUser(userId, userName) {
+            if (!confirm(`정말로 사용자 '${userName}'을 삭제하시겠습니까?`)) {
+                return;
+            }
+
+            fetch(`/admin/delete_user/${userId}`, { method: 'POST' })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        alert(`사용자 '${userName}' 삭제 완료`);
+                        loadUsers();
+                        loadSystemStats();
+                    } else {
+                        alert('삭제 실패: ' + data.message);
+                    }
+                })
+                .catch(error => {
+                    alert('삭제 중 오류 발생');
+                });
+        }
+
+        // 사용자 유사도 분석
+        function showSimilarity(userId) {
+            fetch(`/admin/similarity/${userId}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        const similarities = data.similarities;
+                        let message = `유사도 분석 결과:\n\n`;
+                        
+                        similarities.slice(0, 5).forEach((sim, index) => {
+                            message += `${index + 1}. ${sim.user_name}\n`;
+                            message += `   거리: ${sim.euclidean_distance.toFixed(4)}\n`;
+                            message += `   유사도: ${sim.cosine_similarity.toFixed(4)}\n\n`;
+                        });
+                        
+                        alert(message);
+                    }
+                })
+                .catch(error => {
+                    alert('유사도 분석 실패');
+                });
+        }
+
+        // 사용자 목록 새로고침
+        function refreshUsers() {
+            loadUsers();
+            loadSystemStats();
+        }
+
+        // 유사도 매트릭스 표시 (개발 중)
+        function showSimilarityMatrix() {
+            alert('유사도 매트릭스 기능은 개발 중입니다.');
+        }
+
+        // 데이터 내보내기 (개발 중)
+        function exportSystemData() {
+            alert('데이터 내보내기 기능은 개발 중입니다.');
+        }
+
+        // 시스템 진단 (개발 중)
+        function systemDiagnostics() {
+            alert('시스템 진단 기능은 개발 중입니다.');
+        }
+    </script>
+</body>
+</html>
