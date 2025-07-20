@@ -105,15 +105,15 @@ def frame_capture_thread():
                 time.sleep(0.01)
                 continue
             
-            # 🔥 수정: 매 3번째 프레임만 처리 (성능 향상)
+    
             frame_skip_counter += 1
-            if frame_skip_counter % 3 != 0:
+            if frame_skip_counter % 2 != 0:
                 continue
             
             # 🔥 수정: 프레임 크기 더 작게 최적화
             height, width = frame.shape[:2]
-            new_width = int(width * 0.6)  # 0.8 → 0.6으로 변경
-            new_height = int(height * 0.6)
+            new_width = int(width * 0.8)  
+            new_height = int(height * 0.8)
             frame = cv2.resize(frame, (new_width, new_height))
             
             with frame_lock:
