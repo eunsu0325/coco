@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>⚡ 생체 인증 - BioSecure Palm</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Exo+2:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Exo 2', sans-serif;
+      background: linear-gradient(135deg, #0c0c0c 0%, #1a1a2e 50%, #16213e 100%);
+      min-height: 100vh;
+      color: #fff;
+      overflow-x: hidden;
+    }
+
+    /* 배경 애니메이션 */
+    body::before {
+      content: '';
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-image: 
+        radial-gradient(circle at 25% 25%, rgba(255, 0, 255, 0.1) 0%, transparent 50%),
+        radial-gradient(circle at 75% 75%, rgba(0, 255, 255, 0.1) 0%, transparent 50%);
+      animation: pulse 8s ease-in-out infinite;
+      z-index: -1;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.7; transform: scale(1.05); }
+    }
+
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+
+    /* 헤더 */
+    .header {
+      text-align: center;
+      padding: 30px 0;
+      animation: fadeInDown 1s ease-out;
+    }
+
+    .logo {
+      font-family: 'Orbitron', monospace;
+      font-size: 2.5rem;
+      font-weight: 900;
+      background: linear-gradient(45deg, #ff00ff, #00ffff);
+      background-size: 300% 300%;
+      animation: gradientShift 3s ease-in-out infinite;
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 10px;
+    }
+
+    @keyframes gradientShift {
+      0%, 100% { background-position: 0% 50%; }
+      50% { background-position: 100% 50%; }
+    }
+
+    .page-title {
+      font-size: 1.5rem;
+      color: #a0a0a0;
+      font-weight: 300;
+      letter-spacing: 2px;
+    }
+
+    .status-indicator {
+      display: inline-block;
+      padding: 8px 20px;
+      border-radius: 20px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      margin-top: 15px;
+      background: rgba(0, 255, 255, 0.2);
+      border: 1px solid #00ffff;
+      animation: statusPulse 2s ease-in-out infinite;
+    }
+
+    @keyframes statusPulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.8; transform: scale(1.05); }
+    }
+
+    /* 메인 레이아웃 */
+    .main-layout {
+      display: grid;
+      grid-template-columns: 1fr 350px;
+      gap: 40px;
+      margin: 40px 0;
+      align-items: start;
+    }
+
+    /* 스캐닝 섹션 */
+    .scanning-section {
+      background: rgba(0, 0, 0, 0.4);
+      backdrop-filter: blur(15px);
+      border: 2px solid rgba(255, 0, 255, 0.3);
+      border-radius: 25px;
+      padding: 30px;
+      animation: fadeInLeft 1s ease-out;
+    }
+
+    .video-grid {
+      display: grid;
+      grid-template-columns: 2fr 1fr;
+      gap: 25px;
+      margin-bottom: 25px;
+    }
+
+    .video-container {
+      position: relative;
+      text-align: center;
+    }
+
+    .main-video, .roi-video {
+      border-radius: 20px;
+      background: #000;
+    }
+
+    .main-video {
+      width: 100%;
+      height: 400px;
+      border: 3px solid #00ffff;
+      box-shadow: 0 0 40px rgba(0, 255, 255, 0.4);
+      animation: scanningBorder 3s ease-in-out infinite;
+    }
+
+    .roi-video {
+      width: 100%;
+      height: 320px;
+      border: 2px solid #00ff9d;
+      box-shadow: 0 0 25px rgba(0, 255, 157, 0.3);
+    }
+
+    @keyframes scanningBorder {
+      0%, 100% { 
+        box-shadow: 0 0 40px rgba(0, 255, 255, 0.4);
+      }
+      50% { 
+        box-shadow: 0 0 40px rgba(255, 0, 255, 0.4);
+      }
+    }
+
+    .video-label {
+      margin-top: 15px;
+      font-family: 'Orbitron', monospace;
+      font-size: 0.9rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .main-label {
+      color: #00ffff;
+    }
+
+    .roi-label {
+      color: #00ff9d;
+    }
+
+    /* 인증 결과 섹션 */
+    .result-section {
+      background: rgba(0, 0, 0, 0.6);
+      backdrop-filter: blur(15px);
+      border: 1px solid rgba(0, 255, 255, 0.2);
+      border-radius: 20px;
+      padding: 30px;
+      text-align: center;
+      margin-bottom: 30px;
+    }
+
+    .result-title {
+      font-family: 'Orbitron', monospace;
+      font-size: 1.3rem;
+      color: #00ffff;
+      margin-bottom: 25px;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+    }
+
+    #auth-result {
+      background: rgba(0, 0, 0, 0.8);
+      border: 2px solid rgba(0, 255, 255, 0.3);
+      border-radius: 15px;
+      padding: 25px;
+      font-size: 1.1rem;
+      font-weight: 600;
+      min-height: 100px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.5s ease;
+    }
+
+    .result-success {
+      border-color: #00ff9d !important;
+      background: rgba(0, 255, 157, 0.1) !important;
+      color: #00ff9d !important;
+      animation: successPulse 1s ease-in-out;
+    }
+
+    .result-error {
+      border-color: #ff6b6b !important;
+      background: rgba(255, 107, 107, 0.1) !important;
+      color: #ff6b6b !important;
+      animation: errorShake 0.5s ease-in-out;
+    }
+
+    @keyframes successPulse {
+      0% { transform: scale(1); }
+      50% { transform: scale(1.05); }
+      100% { transform: scale(1); }
+    }
+
+    @keyframes errorShake {
+      0%, 100% { transform: translateX(0); }
+      25% { transform: translateX(-5px); }
+      75% { transform: translateX(5px); }
+    }
+
+    /* 홈 버튼 */
+    .home-btn {
+      display: block;
+      width: 100%;
+      background: rgba(108, 117, 125, 0.8);
+      color: #fff;
+      padding: 15px;
+      border-radius: 12px;
+      text-decoration: none;
+      font-family: 'Orbitron', monospace;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      transition: all 0.3s ease;
+      text-align: center;
+    }
+
+    .home-btn:hover {
+      background: rgba(108, 117, 125, 1);
+      transform: translateY(-2px);
+      box-shadow: 0 5px 15px rgba(108, 117, 125, 0.3);
+    }
+
+    /* 애니메이션 */
+    @keyframes fadeInDown {
+      from { opacity: 0; transform: translateY(-30px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @keyframes fadeInLeft {
+      from { opacity: 0; transform: translateX(-50px); }
+      to { opacity: 1; transform: translateX(0); }
+    }
+
+    /* 반응형 */
+    @media (max-width: 1200px) {
+      .main-layout {
+        grid-template-columns: 1fr;
+        gap: 30px;
+      }
+    }
+
+    @media (max-width: 768px) {
+      .video-grid {
+        grid-template-columns: 1fr;
+        gap: 20px;
+      }
+      .main-video {
+        height: 300px;
+      }
+      .roi-video {
+        height: 250px;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .container {
+        padding: 15px;
+      }
+      .logo {
+        font-size: 2rem;
+      }
+      .main-video {
+        height: 250px;
+      }
+      .roi-video {
+        height: 200px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header class="header">
+      <div class="logo">BioSecure Palm</div>
+      <div class="page-title">BIOMETRIC AUTHENTICATION SYSTEM</div>
+      <div class="status-indicator">⚡ 실시간 스캐닝</div>
+    </header>
+
+    <div class="main-layout">
+      <!-- 스캐닝 섹션 -->
+      <div class="scanning-section">
+        <div class="video-grid">
+          <!-- 메인 스트림 -->
+          <div class="video-container">
+            <img id="video-stream" class="main-video" src="{{ url_for('video_feed') }}" alt="웹캠 스트림">
+            <div class="video-label main-label">실시간 생체 스캐닝</div>
+          </div>
+          
+          <!-- ROI 스트림 -->
+          <div class="video-container">
+            <img id="roi-stream" class="roi-video" src="{{ url_for('roi_feed') }}" alt="ROI 추출">
+            <div class="video-label roi-label">ROI 분석</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 컨트롤 및 정보 패널 -->
+      <div>
+        <!-- 인증 결과 -->
+        <div class="result-section">
+          <div class="result-title">인증 상태</div>
+          <div id="auth-result">🔍 시스템 초기화 중...</div>
+        </div>
+
+        <!-- 홈 버튼 -->
+        <a href="{{ url_for('home') }}" class="home-btn">🏠 홈으로</a>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const resultDiv = document.getElementById('auth-result');
+    const INTERVAL_MS = 2000;
+    let authInterval;
+
+    // 결과 표시 함수
+    function showResult(success, message, user = null) {
+      resultDiv.classList.remove('result-success', 'result-error');
+      
+      if (success) {
+        resultDiv.classList.add('result-success');
+        resultDiv.innerHTML = `
+          <div>
+            <div style="font-size: 2rem; margin-bottom: 10px;">✅</div>
+            <div style="font-weight: 700; margin-bottom: 5px;">인증 성공!</div>
+            <div style="font-size: 0.9rem;">사용자: ${user}</div>
+          </div>
+        `;
+      } else {
+        resultDiv.classList.add('result-error');
+        resultDiv.innerHTML = `
+          <div>
+            <div style="font-size: 2rem; margin-bottom: 10px;">❌</div>
+            <div style="font-weight: 700; margin-bottom: 5px;">인증 실패</div>
+            <div style="font-size: 0.9rem;">${message}</div>
+          </div>
+        `;
+      }
+    }
+
+    // 인증 시도 함수
+    function attemptAuth() {
+      fetch('/auto_auth', { method: 'POST' })
+        .then(res => res.json())
+        .then(data => {
+          showResult(data.success, data.message, data.user);
+        })
+        .catch(err => {
+          console.error('auto_auth 오류:', err);
+          showResult(false, '네트워크 연결 오류');
+        });
+    }
+
+    // 인증 시작
+    function startAuthentication() {
+      resultDiv.innerHTML = `
+        <div>
+          <div style="font-size: 1.5rem; margin-bottom: 10px;">🔍</div>
+          <div>손바닥을 스캐너에 위치시켜주세요</div>
+        </div>
+      `;
+      authInterval = setInterval(attemptAuth, INTERVAL_MS);
+      console.log('⚡ 생체인식 인증 시스템 활성화');
+    }
+
+    // 페이지 로드 시 인증 시작
+    window.addEventListener('DOMContentLoaded', () => {
+      setTimeout(startAuthentication, 1000);
+      console.log('🚀 생체인식 인증 시스템 로딩 완료');
+    });
+
+    // 페이지 종료 시 정리
+    window.addEventListener('beforeunload', () => {
+      if (authInterval) clearInterval(authInterval);
+    });
+  </script>
+</body>
+</html>

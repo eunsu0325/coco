@@ -1,0 +1,6 @@
+torch
+opencv-python
+mediapipe
+mysql-connector-python
+numpy
+PIL

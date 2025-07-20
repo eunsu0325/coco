@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>📊 결과 - BioSecure Palm</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Exo+2:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Exo 2', sans-serif;
+            background: linear-gradient(135deg, #0c0c0c 0%, #1a1a2e 50%, #16213e 100%);
+            min-height: 100vh;
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* 배경 애니메이션 */
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: 
+                radial-gradient(circle at 30% 30%, rgba(0, 255, 255, 0.1) 0%, transparent 50%),
+                radial-gradient(circle at 70% 70%, rgba(255, 0, 255, 0.1) 0%, transparent 50%);
+            animation: resultPulse 6s ease-in-out infinite;
+            z-index: -1;
+        }
+
+        @keyframes resultPulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.8; transform: scale(1.1); }
+        }
+
+        /* 파티클 효과 */
+        .particles {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1;
+        }
+
+        .particle {
+            position: absolute;
+            width: 2px;
+            height: 2px;
+            background: #00ffff;
+            border-radius: 50%;
+            animation: float 6s linear infinite;
+        }
+
+        @keyframes float {
+            0% {
+                opacity: 0;
+                transform: translateY(100vh) scale(0);
+            }
+            10% {
+                opacity: 1;
+            }
+            90% {
+                opacity: 1;
+            }
+            100% {
+                opacity: 0;
+                transform: translateY(-100vh) scale(1);
+            }
+        }
+
+        .container {
+            max-width: 600px;
+            width: 90%;
+            text-align: center;
+            position: relative;
+            z-index: 1;
+            animation: fadeInScale 1s ease-out;
+        }
+
+        @keyframes fadeInScale {
+            from {
+                opacity: 0;
+                transform: scale(0.8) translateY(50px);
+            }
+            to {
+                opacity: 1;
+                transform: scale(1) translateY(0);
+            }
+        }
+
+        /* 로고 */
+        .logo {
+            font-family: 'Orbitron', monospace;
+            font-size: 2rem;
+            font-weight: 900;
+            background: linear-gradient(45deg, #00ffff, #ff00ff);
+            background-size: 300% 300%;
+            animation: gradientShift 3s ease-in-out infinite;
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 30px;
+        }
+
+        @keyframes gradientShift {
+            0%, 100% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+        }
+
+        /* 결과 카드 */
+        .result-card {
+            background: rgba(0, 0, 0, 0.4);
+            backdrop-filter: blur(20px);
+            border: 2px solid rgba(0, 255, 255, 0.3);
+            border-radius: 25px;
+            padding: 50px 40px;
+            position: relative;
+            overflow: hidden;
+            margin-bottom: 30px;
+            animation: cardGlow 4s ease-in-out infinite;
+        }
+
+        @keyframes cardGlow {
+            0%, 100% { 
+                border-color: rgba(0, 255, 255, 0.3);
+                box-shadow: 0 0 30px rgba(0, 255, 255, 0.2);
+            }
+            50% { 
+                border-color: rgba(0, 255, 255, 0.6);
+                box-shadow: 0 0 50px rgba(0, 255, 255, 0.4);
+            }
+        }
+
+        .result-card::before {
+            content: '';
+            position: absolute;
+            top: -2px;
+            left: -2px;
+            right: -2px;
+            bottom: -2px;
+            background: linear-gradient(45deg, #00ffff, #ff00ff, #00ffff);
+            border-radius: 25px;
+            z-index: -1;
+            opacity: 0.1;
+            animation: borderRotate 8s linear infinite;
+        }
+
+        @keyframes borderRotate {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* 결과 아이콘 */
+        .result-icon {
+            font-size: 4rem;
+            margin-bottom: 20px;
+            animation: iconPulse 2s ease-in-out infinite;
+        }
+
+        @keyframes iconPulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+        }
+
+        .success-icon {
+            color: #00ff9d;
+            text-shadow: 0 0 20px rgba(0, 255, 157, 0.5);
+        }
+
+        .error-icon {
+            color: #ff6b6b;
+            text-shadow: 0 0 20px rgba(255, 107, 107, 0.5);
+        }
+
+        .info-icon {
+            color: #00ffff;
+            text-shadow: 0 0 20px rgba(0, 255, 255, 0.5);
+        }
+
+        /* 결과 제목 */
+        .result-title {
+            font-family: 'Orbitron', monospace;
+            font-size: 2rem;
+            font-weight: 700;
+            margin-bottom: 15px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        .success-title {
+            color: #00ff9d;
+            animation: successGlow 2s ease-in-out infinite;
+        }
+
+        .error-title {
+            color: #ff6b6b;
+            animation: errorGlow 2s ease-in-out infinite;
+        }
+
+        .info-title {
+            color: #00ffff;
+            animation: infoGlow 2s ease-in-out infinite;
+        }
+
+        @keyframes successGlow {
+            0%, 100% { text-shadow: 0 0 20px rgba(0, 255, 157, 0.5); }
+            50% { text-shadow: 0 0 30px rgba(0, 255, 157, 0.8); }
+        }
+
+        @keyframes errorGlow {
+            0%, 100% { text-shadow: 0 0 20px rgba(255, 107, 107, 0.5); }
+            50% { text-shadow: 0 0 30px rgba(255, 107, 107, 0.8); }
+        }
+
+        @keyframes infoGlow {
+            0%, 100% { text-shadow: 0 0 20px rgba(0, 255, 255, 0.5); }
+            50% { text-shadow: 0 0 30px rgba(0, 255, 255, 0.8); }
+        }
+
+        /* 결과 메시지 */
+        .result-message {
+            font-size: 1.2rem;
+            line-height: 1.6;
+            color: #a0a0a0;
+            margin-bottom: 30px;
+            font-weight: 400;
+        }
+
+        /* 액션 버튼들 */
+        .action-buttons {
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .action-btn {
+            background: linear-gradient(45deg, #00ffff, #ff00ff);
+            border: none;
+            color: #000;
+            font-family: 'Orbitron', monospace;
+            font-weight: 700;
+            font-size: 1rem;
+            padding: 15px 30px;
+            border-radius: 25px;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-block;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .action-btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 10px 30px rgba(0, 255, 255, 0.4);
+        }
+
+        .action-btn::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(45deg, #ff00ff, #00ffff);
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .action-btn:hover::before {
+            opacity: 1;
+        }
+
+        .action-btn span {
+            position: relative;
+            z-index: 1;
+        }
+
+        .secondary-btn {
+            background: rgba(108, 117, 125, 0.8);
+            color: #fff;
+        }
+
+        .secondary-btn:hover {
+            background: rgba(108, 117, 125, 1);
+            box-shadow: 0 10px 30px rgba(108, 117, 125, 0.4);
+        }
+
+        .secondary-btn::before {
+            background: rgba(108, 117, 125, 1);
+        }
+
+        /* 메타데이터 */
+        .result-metadata {
+            margin-top: 30px;
+            padding: 20px;
+            background: rgba(0, 0, 0, 0.6);
+            border-radius: 15px;
+            border: 1px solid rgba(0, 255, 255, 0.2);
+        }
+
+        .metadata-title {
+            font-family: 'Orbitron', monospace;
+            font-size: 1rem;
+            color: #00ffff;
+            margin-bottom: 15px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .metadata-item {
+            display: flex;
+            justify-content: space-between;
+            margin: 8px 0;
+            font-size: 0.9rem;
+        }
+
+        .metadata-label {
+            color: #a0a0a0;
+        }
+
+        .metadata-value {
+            color: #00ff9d;
+            font-weight: 600;
+        }
+
+        /* 반응형 */
+        @media (max-width: 768px) {
+            .container {
+                width: 95%;
+            }
+
+            .result-card {
+                padding: 40px 30px;
+            }
+
+            .logo {
+                font-size: 1.5rem;
+            }
+
+            .result-title {
+                font-size: 1.5rem;
+            }
+
+            .result-message {
+                font-size: 1.1rem;
+            }
+
+            .action-buttons {
+                flex-direction: column;
+                align-items: center;
+            }
+
+            .action-btn {
+                width: 100%;
+                max-width: 250px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .result-card {
+                padding: 30px 20px;
+            }
+
+            .result-icon {
+                font-size: 3rem;
+            }
+
+            .result-title {
+                font-size: 1.3rem;
+            }
+
+            .action-btn {
+                font-size: 0.9rem;
+                padding: 12px 25px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="particles" id="particles"></div>
+    
+    <div class="container">
+        <div class="logo">BioSecure Palm</div>
+        
+        <div class="result-card">
+            <div class="result-icon info-icon" id="result-icon">📊</div>
+            <div class="result-title info-title" id="result-title">처리 완료</div>
+            <div class="result-message" id="result-message">{{ message }}</div>
+            
+            <div class="action-buttons">
+                <a href="{{ url_for('home') }}" class="action-btn">
+                    <span>🏠 홈으로</span>
+                </a>
+                <a href="javascript:history.back()" class="action-btn secondary-btn">
+                    <span>← 이전 페이지</span>
+                </a>
+            </div>
+            
+            <div class="result-metadata">
+                <div class="metadata-title">세션 정보</div>
+                <div class="metadata-item">
+                    <span class="metadata-label">처리 시간:</span>
+                    <span class="metadata-value" id="timestamp"></span>
+                </div>
+                <div class="metadata-item">
+                    <span class="metadata-label">세션 ID:</span>
+                    <span class="metadata-value" id="session-id"></span>
+                </div>
+                <div class="metadata-item">
+                    <span class="metadata-label">보안 레벨:</span>
+                    <span class="metadata-value">🔐 HIGH</span>
+                </div>
+                <div class="metadata-item">
+                    <span class="metadata-label">시스템 상태:</span>
+                    <span class="metadata-value">✅ 정상</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 파티클 생성
+        function createParticles() {
+            const particlesContainer = document.getElementById('particles');
+            const particleCount = 50;
+            
+            for (let i = 0; i < particleCount; i++) {
+                const particle = document.createElement('div');
+                particle.className = 'particle';
+                particle.style.left = Math.random() * 100 + '%';
+                particle.style.animationDelay = Math.random() * 6 + 's';
+                particle.style.animationDuration = (Math.random() * 3 + 3) + 's';
+                
+                // 랜덤 색상
+                const colors = ['#00ffff', '#ff00ff', '#00ff9d'];
+                particle.style.background = colors[Math.floor(Math.random() * colors.length)];
+                
+                particlesContainer.appendChild(particle);
+            }
+        }
+
+        // 메시지 타입 감지 및 스타일 적용
+        function detectMessageType() {
+            const message = document.getElementById('result-message').textContent.toLowerCase();
+            const icon = document.getElementById('result-icon');
+            const title = document.getElementById('result-title');
+            
+            if (message.includes('성공') || message.includes('완료') || message.includes('등록')) {
+                icon.textContent = '✅';
+                icon.className = 'result-icon success-icon';
+                title.textContent = '성공';
+                title.className = 'result-title success-title';
+            } else if (message.includes('실패') || message.includes('오류') || message.includes('에러')) {
+                icon.textContent = '❌';
+                icon.className = 'result-icon error-icon';
+                title.textContent = '실패';
+                title.className = 'result-title error-title';
+            } else {
+                icon.textContent = '📊';
+                icon.className = 'result-icon info-icon';
+                title.textContent = '알림';
+                title.className = 'result-title info-title';
+            }
+        }
+
+        // 세션 정보 생성
+        function generateSessionInfo() {
+            const now = new Date();
+            const timestamp = now.toLocaleString('ko-KR');
+            const sessionId = 'BS-' + now.getTime().toString(36).toUpperCase();
+            
+            document.getElementById('timestamp').textContent = timestamp;
+            document.getElementById('session-id').textContent = sessionId;
+        }
+
+        // 페이지 로드 시 실행
+        window.addEventListener('DOMContentLoaded', () => {
+            createParticles();
+            detectMessageType();
+            generateSessionInfo();
+            
+            console.log('📊 BioSecure Palm 결과 페이지 로드 완료');
+        });
+
+        // 키보드 단축키
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' || e.key === 'h' || e.key === 'H') {
+                window.location.href = "{{ url_for('home') }}";
+            } else if (e.key === 'Backspace' || e.key === 'b' || e.key === 'B') {
+                history.back();
+            }
+        });
+
+        // 마우스 이동 효과
+        document.addEventListener('mousemove', (e) => {
+            const mouseX = e.clientX / window.innerWidth;
+            const mouseY = e.clientY / window.innerHeight;
+            
+            // 배경 그라디언트 효과
+            document.documentElement.style.setProperty('--mouse-x', mouseX);
+            document.documentElement.style.setProperty('--mouse-y', mouseY);
+        });
+    </script>
+</body>
+</html>
