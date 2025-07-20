@@ -1,15 +1,18 @@
-# app.py - 비디오 스트림 최적화 버전 (Lazy Loading)
+# app.py - 인터랙티브 등록 시스템 (사용자 확인 후 저장) + 관리자 페이지 추가
 
 from flask import Flask, render_template, Response, request, jsonify
 import numpy as np
+import base64
 from collections import defaultdict
 import cv2
 import threading
 import time
 import os
+import uuid
+import mariadb
 
 from model_ops import extract_embedding, load_ccnet_model, get_hand_roi_with_visualization
-from db_ops import register_user, multi_shot_authenticate
+from db_ops import register_user, multi_shot_authenticate, connect_to_db
 
 app = Flask(__name__)
 
@@ -18,14 +21,23 @@ app = Flask(__name__)
 # ────────────────────────────────────────────────────────────────────
 cap = None
 net = None
-temp_storage = defaultdict(list)  # 등록 과정에서 임시 임베딩 저장
+
+# 🔥 NEW: 인터랙티브 등록용 스토리지
+user_sessions = defaultdict(lambda: {
+    'images': [],        # 촬영된 이미지들 (임시)
+    'embeddings': [],    # 대응하는 임베딩들 (임시)
+    'confirmed': [],     # 사용자가 확인한 이미지들
+    'confirmed_embeddings': [],  # 확인된 임베딩들
+    'session_id': str(uuid.uuid4())
+})
 
 # 스트리밍용 변수
 latest_frame = None
 latest_roi = None
+original_frame = None
 frame_lock = threading.Lock()
 
-# 🔥 새로 추가: 비디오 스트림 상태 관리
+# 비디오 스트림 상태 관리
 video_enabled = False
 capture_thread_running = False
 
@@ -36,18 +48,15 @@ model_info = {
     'loaded': False
 }
 
-def store_temp_embedding(username, embedding):
-    temp_storage[username].append(embedding)
-
-def retrieve_all_temp_embeddings(username):
-    return temp_storage[username]
-
-def clear_temp_embeddings(username):
-    temp_storage[username].clear()
+def clear_user_session(username):
+    """사용자 세션 정리"""
+    if username in user_sessions:
+        del user_sessions[username]
 
 # ────────────────────────────────────────────────────────────────────
-# 🔥 수정: Lazy 웹캠 초기화 함수
+# 웹캠 초기화 및 스트림 (기존과 동일)
 # ────────────────────────────────────────────────────────────────────
+
 def initialize_camera():
     """웹캠을 lazy하게 초기화하는 함수"""
     global cap, video_enabled, capture_thread_running
@@ -56,46 +65,40 @@ def initialize_camera():
         return True
     
     try:
-        print("📹 웹캠 lazy 초기화 시작...")
+        print("📹 고해상도 웹캠 lazy 초기화 시작...")
         cap = cv2.VideoCapture(0)
         
         if not cap.isOpened():
             print("❌ 웹캠을 열 수 없습니다.")
             return False
         
-        # 웹캠 설정 최적화
-        cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+        cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
         cap.set(cv2.CAP_PROP_FPS, 30)
         cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
         
         video_enabled = True
         
-        # 백그라운드 스레드 시작 (한 번만)
         if not capture_thread_running:
             capture_thread = threading.Thread(target=frame_capture_thread, daemon=True)
             capture_thread.start()
             capture_thread_running = True
             
-        print("✅ 웹캠 lazy 초기화 완료!")
+        print("✅ 고해상도 웹캠 lazy 초기화 완료!")
         return True
         
     except Exception as e:
         print(f"❌ 웹캠 초기화 오류: {e}")
         return False
 
-# ────────────────────────────────────────────────────────────────────
-# 🔥 수정: 프레임 캡처 스레드 (조건부 실행)
-# ────────────────────────────────────────────────────────────────────
 def frame_capture_thread():
     """백그라운드에서 지속적으로 프레임을 캡처하고 처리"""
-    global cap, latest_frame, latest_roi, video_enabled
+    global cap, latest_frame, latest_roi, original_frame, video_enabled
     
     frame_skip_counter = 0
     
     while True:
         try:
-            # 비디오가 비활성화되어 있거나 cap이 없으면 대기
             if not video_enabled or cap is None:
                 time.sleep(0.1)
                 continue
@@ -105,40 +108,33 @@ def frame_capture_thread():
                 time.sleep(0.01)
                 continue
             
-    
             frame_skip_counter += 1
             if frame_skip_counter % 2 != 0:
                 continue
             
-            # 🔥 수정: 프레임 크기 더 작게 최적화
             height, width = frame.shape[:2]
-            new_width = int(width * 0.8)  
-            new_height = int(height * 0.8)
+            new_width = int(width * 0.9)
+            new_height = int(height * 0.9)
             frame = cv2.resize(frame, (new_width, new_height))
             
             with frame_lock:
-                # 메인 프레임 처리 (시각화 포함)
+                original_frame = frame.copy()
+                
                 try:
                     visualized_frame = get_hand_roi_with_visualization(frame)
                     latest_frame = visualized_frame if visualized_frame is not None else frame
                     
-                    # 기본 CCNet 정보 표시
                     if model_info['loaded']:
-                        cv2.putText(latest_frame, "Basic CCNet Active", (10, latest_frame.shape[0] - 30), 
+                        cv2.putText(latest_frame, "Interactive Registration Active", (10, latest_frame.shape[0] - 30), 
                                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
                 except:
                     latest_frame = frame
                 
-                # ROI 프레임 처리
                 try:
                     from model_ops import get_hand_roi
-                    roi = get_hand_roi(frame)
+                    roi = get_hand_roi(original_frame)
                     if roi is not None:
                         latest_roi = cv2.resize(roi, (128, 128), interpolation=cv2.INTER_AREA)
-                        # ROI에도 기본 CCNet 정보 표시
-                        if model_info['loaded']:
-                            cv2.putText(latest_roi, "CCNet", (5, 15), 
-                                       cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 255, 0), 1)
                     else:
                         error_frame = np.zeros((128, 128, 3), dtype=np.uint8)
                         cv2.putText(error_frame, "No Hand", (30, 70), 
@@ -150,23 +146,18 @@ def frame_capture_thread():
                                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1)
                     latest_roi = error_frame
             
-            time.sleep(0.05)  # 🔥 수정: 0.033 → 0.05 (약 20 FPS)
+            time.sleep(0.05)
             
         except Exception as e:
             print(f"❌ Frame capture error: {e}")
             time.sleep(0.1)
 
-# ────────────────────────────────────────────────────────────────────
-# 🔥 수정: 스트림 생성 함수들 (Lazy Loading)
-# ────────────────────────────────────────────────────────────────────
 def gen_frames():
-    """메인 웹캠 스트림 생성 - Lazy Loading 버전"""
+    """메인 웹캠 스트림 생성"""
     global latest_frame, video_enabled
     
-    # 웹캠 초기화 시도
     if not video_enabled:
         if not initialize_camera():
-            # 초기화 실패 시 더미 프레임 생성
             while True:
                 frame = np.zeros((480, 640, 3), dtype=np.uint8)
                 cv2.putText(frame, "Camera initialization failed", (100, 240), 
@@ -183,17 +174,15 @@ def gen_frames():
                     )
                 time.sleep(0.1)
     
-    # 정상 스트림 생성
     while True:
         with frame_lock:
             if latest_frame is not None:
                 frame = latest_frame.copy()
             else:
                 frame = np.zeros((480, 640, 3), dtype=np.uint8)
-                cv2.putText(frame, "Loading Basic CCNet...", (200, 240), 
+                cv2.putText(frame, "Loading Interactive System...", (200, 240), 
                            cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
         
-        # JPEG 압축
         encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), 80]
         ret, buffer = cv2.imencode('.jpg', frame, encode_param)
         
@@ -207,10 +196,9 @@ def gen_frames():
         )
 
 def gen_roi_frames():
-    """ROI 스트림 생성 - Lazy Loading 버전"""
+    """ROI 스트림 생성"""
     global latest_roi, video_enabled
     
-    # 웹캠이 초기화되지 않았으면 더미 프레임
     while True:
         with frame_lock:
             if latest_roi is not None and video_enabled:
@@ -224,8 +212,7 @@ def gen_roi_frames():
                     cv2.putText(roi_frame, "Camera Off", (20, 70), 
                                cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 255, 255), 1)
         
-        # JPEG 압축
-        encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), 70]
+        encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), 85]
         ret, buffer = cv2.imencode('.jpg', roi_frame, encode_param)
         
         if not ret:
@@ -238,7 +225,7 @@ def gen_roi_frames():
         )
 
 # ────────────────────────────────────────────────────────────────────
-# Flask 라우트 (변경 없음)
+# Flask 라우트 (기본)
 # ────────────────────────────────────────────────────────────────────
 
 @app.route('/')
@@ -247,7 +234,6 @@ def home():
 
 @app.route('/video_feed')
 def video_feed():
-    """🔥 수정: Lazy Loading 웹캠 스트림"""
     return Response(
         gen_frames(),
         mimetype='multipart/x-mixed-replace; boundary=frame'
@@ -255,7 +241,6 @@ def video_feed():
 
 @app.route('/roi_feed')
 def roi_feed():
-    """🔥 수정: Lazy Loading ROI 스트림"""
     return Response(
         gen_roi_frames(),
         mimetype='multipart/x-mixed-replace; boundary=frame'
@@ -267,107 +252,318 @@ def get_model_info():
     return jsonify(model_info)
 
 # ────────────────────────────────────────────────────────────────────
-# 사용자 등록 - 10장 강제 (기본 CCNet)
+# 🔥 NEW: 인터랙티브 등록 시스템
 # ────────────────────────────────────────────────────────────────────
 
 @app.route('/register', methods=['GET'])
 def register():
     return render_template('register.html')
 
-@app.route('/auto_capture', methods=['POST'])
-def auto_capture():
-    """자동 캡처 - 실패시 재시도, 성공시 다음으로 (기본 CCNet 사용)"""
-    global latest_frame, net
+@app.route('/start_session', methods=['POST'])
+def start_session():
+    """새로운 등록 세션 시작"""
+    data = request.get_json()
+    username = data.get('username', 'NoName')
+    
+    # 기존 세션 정리
+    clear_user_session(username)
+    
+    # 새 세션 생성
+    user_sessions[username] = {
+        'images': [],
+        'embeddings': [],
+        'confirmed': [],
+        'confirmed_embeddings': [],
+        'session_id': str(uuid.uuid4()),
+        'created_at': time.time()
+    }
+    
+    return jsonify({
+        "success": True,
+        "session_id": user_sessions[username]['session_id'],
+        "message": f"🚀 {username}의 인터랙티브 등록 세션 시작!"
+    })
+
+@app.route('/capture_single', methods=['POST'])
+def capture_single():
+    """한 장씩 촬영 (🎨 고품질 이미지 처리 버전)"""
+    global latest_roi, original_frame, net
 
     data = request.get_json()
     username = data.get('username', 'NoName')
-    shot_index = data.get('shotIndex', 0)
 
-    # 🔥 수정: 웹캠 초기화 확인
     if not video_enabled:
         initialize_camera()
-        time.sleep(0.5)  # 초기화 대기
+        time.sleep(0.5)
 
-    # 최신 프레임 사용
+    # ROI 스트림에서 고품질 이미지 가져오기
     with frame_lock:
-        if latest_frame is not None:
-            frame = latest_frame.copy()
+        if latest_roi is not None and original_frame is not None:
+            roi_clean = latest_roi.copy()
+            current_original = original_frame.copy()
         else:
             return jsonify({
-                "error": True, 
-                "retry": True,
-                "shot_index": shot_index,
-                "message": "카메라 연결을 확인해주세요."
+                "error": True,
+                "message": "카메라에서 이미지를 가져올 수 없습니다."
             })
 
-    # 기본 CCNet으로 임베딩 추출
     try:
-        embedding = extract_embedding(frame, net)
+        # 🎨 개선된 품질 평가 사용
+        from model_ops import assess_roi_quality_visual, create_beautiful_roi
+        is_good, quality_score, reason = assess_roi_quality_visual(roi_clean, threshold=0.15)
         
+        if not is_good:
+            return jsonify({
+                "error": True,
+                "message": f"❌ 품질이 낮습니다!\n\n문제: {reason}\n점수: {quality_score:.3f}/1.0\n\n손바닥을 더 선명하게 보여주세요."
+            })
+        
+        # 🌟 아름다운 ROI 생성
+        beautiful_roi = create_beautiful_roi(roi_clean, target_size=128)
+        if beautiful_roi is None:
+            beautiful_roi = roi_clean  # 실패 시 원본 사용
+        
+        # 임베딩 추출
+        embedding = extract_embedding(current_original, net)
         if embedding is None:
-            # ❌ 실패시 - 같은 샷 번호로 재시도
             return jsonify({
-                "error": True, 
-                "retry": True,
-                "shot_index": shot_index,
-                "message": f"🖐️ {shot_index}번째 촬영 실패!\n\n손바닥을 카메라 정면에 펼쳐서 보여주세요!\n• 손바닥 전체가 화면에 나오도록\n• 충분한 조명 확보\n• 손가락을 펼친 상태로\n\n기본 CCNet으로 재시도 중..."
+                "error": True,
+                "message": "❌ 임베딩 추출 실패!\n\nCCNet 처리 중 오류가 발생했습니다."
             })
-        else:
-            # ✅ 성공시 - 임베딩 저장하고 다음 샷으로
-            store_temp_embedding(username, embedding)
-            
-            return jsonify({
-                "error": False,
-                "retry": False,
-                "shot_index": shot_index,
-                "message": f"✅ {shot_index}번째 촬영 완료! (기본 CCNet)"
-            })
-            
-    except Exception as e:
-        print(f"⚠️ 임베딩 추출 실패: {e}")
-        return jsonify({
-            "error": True, 
-            "retry": True,
-            "shot_index": shot_index,
-            "message": f"🖐️ {shot_index}번째 촬영 실패!\n\n손바닥을 카메라 정면에 펼쳐서 보여주세요!\n• 손바닥 전체가 화면에 나오도록\n• 충분한 조명 확보\n• 손가락을 펼친 상태로\n\n재시도 중..."
-        })
-
-@app.route('/finish_auto_capture', methods=['POST'])
-def finish_auto_capture():
-    """등록 완료 - 정확히 10장 체크 (기본 CCNet)"""
-    data = request.get_json()
-    username = data.get('username', 'NoName')
-
-    all_embeds = retrieve_all_temp_embeddings(username)
-    
-    # ✅ 정확히 10장인지 체크
-    if len(all_embeds) != 10:
-        clear_temp_embeddings(username)  # 실패시 임시 저장소 정리
-        return jsonify({
-            "error": True,
-            "message": f"등록 실패: 정확히 10장이 필요합니다. (현재: {len(all_embeds)}장)\n다시 등록을 진행해주세요."
-        }), 400
-
-    try:
-        # 가중 평균 방식 사용 (db_ops.py의 개선된 함수)
-        register_user(username, all_embeds)
-        clear_temp_embeddings(username)
         
-        model_type = model_info.get('type', 'Unknown')
+        # 세션에 임시 저장
+        session = user_sessions[username]
+        image_id = len(session['images']) + 1
+        
+        session['images'].append({
+            'id': image_id,
+            'image': beautiful_roi.copy(),  # 🎨 개선된 이미지 저장
+            'quality_score': quality_score,
+            'reason': reason,
+            'timestamp': time.time()
+        })
+        session['embeddings'].append(embedding)
+        
+        # Base64 인코딩해서 응답 (JPEG 품질 95로 향상)
+        encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), 95]  # 80 → 95로 향상
+        _, buffer = cv2.imencode('.jpg', beautiful_roi, encode_param)
+        img_base64 = base64.b64encode(buffer).decode('utf-8')
         
         return jsonify({
             "success": True,
-            "message": f"🎉 {username} 등록 완료! ({model_type})\n10장의 생체 데이터가 성공적으로 등록되었습니다.\n기본 CCNet으로 안정적인 임베딩 생성!"
+            "image_id": image_id,
+            "image_data": f"data:image/jpeg;base64,{img_base64}",
+            "quality_score": quality_score,
+            "reason": reason,
+            "message": f"✅ {image_id}번째 이미지 촬영 완료!\n\n품질: {quality_score:.3f} ({reason})\n\n🎨 고품질 처리 완료!"
         })
+        
     except Exception as e:
-        clear_temp_embeddings(username)
+        print(f"❌ 촬영 실패: {e}")
         return jsonify({
             "error": True,
-            "message": f"등록 중 오류가 발생했습니다: {str(e)}"
-        }), 500
+            "message": f"촬영 중 오류: {str(e)}"
+        })
+
+@app.route('/get_session_images/<username>')
+def get_session_images(username):
+    """현재 세션의 모든 이미지 가져오기"""
+    try:
+        session = user_sessions[username]
+        
+        images_data = []
+        for img_data in session['images']:
+            _, buffer = cv2.imencode('.jpg', img_data['image'])
+            img_base64 = base64.b64encode(buffer).decode('utf-8')
+            
+            images_data.append({
+                'id': img_data['id'],
+                'image_data': f"data:image/jpeg;base64,{img_base64}",
+                'quality_score': img_data['quality_score'],
+                'reason': img_data['reason'],
+                'timestamp': img_data['timestamp'],
+                'confirmed': img_data['id'] in [c['id'] for c in session['confirmed']]
+            })
+        
+        confirmed_count = len(session['confirmed'])
+        total_count = len(session['images'])
+        
+        return jsonify({
+            'success': True,
+            'images': images_data,
+            'stats': {
+                'total_captured': total_count,
+                'confirmed': confirmed_count,
+                'remaining_needed': max(0, 10 - confirmed_count),
+                'can_register': confirmed_count >= 10
+            }
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        })
+
+@app.route('/confirm_image', methods=['POST'])
+def confirm_image():
+    """이미지 확인 (최종 등록용으로 선택)"""
+    data = request.get_json()
+    username = data.get('username')
+    image_id = data.get('image_id')
+    
+    try:
+        session = user_sessions[username]
+        
+        # 이미지 찾기
+        target_img = None
+        target_embedding = None
+        for i, img_data in enumerate(session['images']):
+            if img_data['id'] == image_id:
+                target_img = img_data
+                target_embedding = session['embeddings'][i]
+                break
+        
+        if target_img is None:
+            return jsonify({
+                "error": True,
+                "message": "이미지를 찾을 수 없습니다."
+            })
+        
+        # 이미 확인된 이미지인지 체크
+        if any(c['id'] == image_id for c in session['confirmed']):
+            return jsonify({
+                "error": True,
+                "message": "이미 선택된 이미지입니다."
+            })
+        
+        # 10개 초과 방지
+        if len(session['confirmed']) >= 10:
+            return jsonify({
+                "error": True,
+                "message": "최대 10개까지만 선택할 수 있습니다."
+            })
+        
+        # 확인 목록에 추가
+        session['confirmed'].append(target_img)
+        session['confirmed_embeddings'].append(target_embedding)
+        
+        confirmed_count = len(session['confirmed'])
+        
+        return jsonify({
+            "success": True,
+            "confirmed_count": confirmed_count,
+            "remaining_needed": max(0, 10 - confirmed_count),
+            "can_register": confirmed_count >= 10,
+            "message": f"✅ 이미지 #{image_id} 선택 완료!\n\n현재 선택: {confirmed_count}/10개"
+        })
+        
+    except Exception as e:
+        return jsonify({
+            "error": True,
+            "message": f"오류: {str(e)}"
+        })
+
+@app.route('/remove_confirmed', methods=['POST'])
+def remove_confirmed():
+    """확인된 이미지 제거"""
+    data = request.get_json()
+    username = data.get('username')
+    image_id = data.get('image_id')
+    
+    try:
+        session = user_sessions[username]
+        
+        # 확인 목록에서 제거
+        session['confirmed'] = [img for img in session['confirmed'] if img['id'] != image_id]
+        
+        # 대응하는 임베딩도 제거 (ID 매칭으로)
+        original_ids = [img['id'] for img in session['images']]
+        confirmed_indices = []
+        for conf_img in session['confirmed']:
+            try:
+                idx = original_ids.index(conf_img['id'])
+                confirmed_indices.append(idx)
+            except ValueError:
+                continue
+        
+        session['confirmed_embeddings'] = [session['embeddings'][i] for i in confirmed_indices]
+        
+        confirmed_count = len(session['confirmed'])
+        
+        return jsonify({
+            "success": True,
+            "confirmed_count": confirmed_count,
+            "remaining_needed": max(0, 10 - confirmed_count),
+            "can_register": confirmed_count >= 10,
+            "message": f"🗑️ 이미지 #{image_id} 선택 해제!\n\n현재 선택: {confirmed_count}/10개"
+        })
+        
+    except Exception as e:
+        return jsonify({
+            "error": True,
+            "message": f"오류: {str(e)}"
+        })
+
+@app.route('/finalize_registration', methods=['POST'])
+def finalize_registration():
+    """최종 등록 실행"""
+    data = request.get_json()
+    username = data.get('username')
+    
+    try:
+        session = user_sessions[username]
+        
+        if len(session['confirmed']) < 10:
+            return jsonify({
+                "error": True,
+                "message": f"❌ 10개의 이미지가 필요합니다!\n\n현재 선택: {len(session['confirmed'])}개\n부족: {10 - len(session['confirmed'])}개"
+            })
+        
+        # 정확히 10개만 사용
+        final_embeddings = session['confirmed_embeddings'][:10]
+        
+        if len(final_embeddings) != 10:
+            return jsonify({
+                "error": True,
+                "message": "임베딩 개수가 맞지 않습니다."
+            })
+        
+        # 임베딩 품질 검증
+        quality_passed = 0
+        for i, emb in enumerate(final_embeddings):
+            emb_norm = np.linalg.norm(emb)
+            emb_std = np.std(emb)
+            
+            if 0.1 <= emb_norm <= 5.0 and emb_std >= 0.01:
+                quality_passed += 1
+        
+        if quality_passed < 8:  # 10개 중 8개는 통과해야 함
+            return jsonify({
+                "error": True,
+                "message": f"❌ 임베딩 품질 검증 실패!\n\n통과: {quality_passed}/10개\n최소 필요: 8개\n\n더 선명한 이미지들을 선택해주세요."
+            })
+        
+        # DB에 등록
+        register_user(username, final_embeddings)
+        
+        # 세션 정리
+        clear_user_session(username)
+        
+        return jsonify({
+            "success": True,
+            "message": f"🎉 {username} 등록 완료!\n\n📊 등록 통계:\n• 선택한 이미지: 10장\n• 품질 통과: {quality_passed}장\n• 등록 방식: 사용자 직접 선택\n\n✨ 인터랙티브 등록 시스템으로\n최고 품질의 생체 데이터가 등록되었습니다!"
+        })
+        
+    except Exception as e:
+        clear_user_session(username)
+        return jsonify({
+            "error": True,
+            "message": f"등록 중 오류: {str(e)}"
+        })
 
 # ────────────────────────────────────────────────────────────────────
-# 사용자 인증 (기본 CCNet)
+# 기존 인증 시스템 (변경 없음)
 # ────────────────────────────────────────────────────────────────────
 
 @app.route('/authenticate', methods=['GET'])
@@ -376,29 +572,29 @@ def authenticate_page():
 
 @app.route('/auto_auth', methods=['POST'])
 def auto_auth():
-    """자동 인증 (기본 CCNet 사용)"""
-    global latest_frame, net
+    """자동 인증"""
+    global original_frame, net
 
-    # 🔥 수정: 웹캠 초기화 확인
     if not video_enabled:
         initialize_camera()
-        time.sleep(0.5)  # 초기화 대기
+        time.sleep(0.5)
 
-    # 최신 프레임 사용
     with frame_lock:
-        if latest_frame is not None:
-            frame = latest_frame.copy()
+        if original_frame is not None:
+            frame = original_frame.copy()
         else:
-            return jsonify({"success": False, "message": "프레임을 읽을 수 없습니다."})
+            return jsonify({
+                "success": False, 
+                "message": "프레임을 읽을 수 없습니다."
+            })
 
-    # 기본 CCNet으로 임베딩 추출
     try:
         embedding = extract_embedding(frame, net)
         
         if embedding is None:
             return jsonify({
                 "success": False, 
-                "message": "🖐️ 손바닥을 제대로 보여주세요!\n• 손바닥 전체가 화면에 나오도록\n• 충분한 조명 확보\n• 손가락을 펼친 상태로\n\n기본 CCNet으로 인증 시도 중..."
+                "message": "🖐️ 손바닥을 보여주세요!"
             })
 
         result = multi_shot_authenticate(embedding)
@@ -407,97 +603,206 @@ def auto_auth():
         if result:
             return jsonify({
                 "success": True,
-                "message": f"✅ 인증 성공! ({model_type})\n기본 CCNet으로 안정적인 인증 완료!",
+                "message": f"✅ 인증 성공!\n\n👤 사용자: {result}\n🤖 모델: {model_type}\n🔒 인터랙티브 등록 데이터로 인증!",
                 "user": result
             })
         else:
             return jsonify({
                 "success": False,
-                "message": f"❌ 인증 실패: 등록된 사용자가 아니거나 손바닥을 다시 보여주세요.\n({model_type} 사용)"
+                "message": f"❌ 인증 실패\n\n등록된 사용자가 아니거나\n손바닥을 다시 보여주세요."
             })
             
     except Exception as e:
-        print(f"⚠️ 인증 중 오류: {e}")
         return jsonify({
             "success": False,
-            "message": "🖐️ 손바닥을 제대로 보여주세요!\n• 손바닥 전체가 화면에 나오도록\n• 충분한 조명 확보\n• 손가락을 펼친 상태로"
+            "message": f"인증 중 오류: {str(e)}"
         })
 
 # ────────────────────────────────────────────────────────────────────
-# 🔥 수정: 앱 실행 (웹캠 초기화 제거)
+# 🔥 NEW: 관리자 페이지 라우트 추가
+# ────────────────────────────────────────────────────────────────────
+
+@app.route('/admin')
+def admin_page():
+    """관리자 페이지"""
+    return render_template('admin.html')
+
+@app.route('/admin/stats')
+def admin_stats():
+    """시스템 통계 API"""
+    try:
+        conn = connect_to_db()
+        if conn is None:
+            return jsonify({"success": False, "message": "DB 연결 실패"})
+        
+        cursor = conn.cursor()
+        
+        # 총 사용자 수
+        cursor.execute("SELECT COUNT(*) FROM users")
+        total_users = cursor.fetchone()[0]
+        
+        # 총 인증 시도
+        cursor.execute("SELECT COUNT(*) FROM access_logs")
+        total_auth_attempts = cursor.fetchone()[0]
+        
+        # 성공한 인증
+        cursor.execute("SELECT COUNT(*) FROM access_logs WHERE status = 'Success'")
+        successful_auths = cursor.fetchone()[0]
+        
+        # 성공률 계산
+        success_rate = round((successful_auths / total_auth_attempts * 100), 1) if total_auth_attempts > 0 else 0
+        
+        conn.close()
+        
+        return jsonify({
+            "success": True,
+            "stats": {
+                "total_users": total_users,
+                "total_auth_attempts": total_auth_attempts,
+                "successful_auths": successful_auths,
+                "success_rate": success_rate
+            }
+        })
+        
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)})
+
+@app.route('/admin/users')
+def admin_users():
+    """사용자 목록 API"""
+    try:
+        conn = connect_to_db()
+        if conn is None:
+            return jsonify({"success": False, "message": "DB 연결 실패"})
+        
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, name, created_at, LENGTH(palm_embedding) as embedding_size FROM users ORDER BY created_at DESC")
+        users = cursor.fetchall()
+        
+        user_list = []
+        for user in users:
+            user_list.append({
+                "id": user[0],
+                "name": user[1],
+                "registration_date": user[2].strftime("%Y-%m-%d %H:%M:%S") if user[2] else "Unknown",
+                "embedding_size": user[3] if user[3] else 0
+            })
+        
+        conn.close()
+        
+        return jsonify({
+            "success": True,
+            "users": user_list
+        })
+        
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)})
+
+@app.route('/admin/delete_user/<int:user_id>', methods=['POST'])
+def admin_delete_user(user_id):
+    """사용자 삭제 API"""
+    try:
+        conn = connect_to_db()
+        if conn is None:
+            return jsonify({"success": False, "message": "DB 연결 실패"})
+        
+        cursor = conn.cursor()
+        
+        # 사용자 이름 가져오기
+        cursor.execute("SELECT name FROM users WHERE id = %s", (user_id,))
+        user = cursor.fetchone()
+        
+        if not user:
+            return jsonify({"success": False, "message": "사용자를 찾을 수 없습니다."})
+        
+        username = user[0]
+        
+        # 사용자 삭제
+        cursor.execute("DELETE FROM users WHERE id = %s", (user_id,))
+        
+        # 관련 로그도 삭제
+        cursor.execute("DELETE FROM access_logs WHERE user_name = %s", (username,))
+        
+        conn.commit()
+        conn.close()
+        
+        return jsonify({
+            "success": True,
+            "message": f"사용자 '{username}' 삭제 완료"
+        })
+        
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)})
+
+@app.route('/admin/similarity/<int:user_id>')
+def admin_similarity(user_id):
+    """사용자별 유사도 분석 API (개발 중)"""
+    return jsonify({
+        "success": True,
+        "similarities": [
+            {"user_name": "Sample User", "euclidean_distance": 0.5432, "cosine_similarity": 0.8765}
+        ]
+    })
+
+# ────────────────────────────────────────────────────────────────────
+# 앱 실행
 # ────────────────────────────────────────────────────────────────────
 
 def load_basic_ccnet_model():
-    """기본 CCNet 모델 로드"""
+    """CCNet 모델 로드"""
     global net, model_info
     
-    # 기본 모델 경로들
     model_paths = [
-        "/Users/kimeunsu/Desktop/공부/졸작 논문/CCNet-main-2/access_system1/models/checkpointsnet_params_best.pth",
-        "/Users/kimeunsu/Desktop/공부/졸작 논문/CCNet-main-2/access_system1/models/checkpointsnet_params.pth"
+        "/Users/kimeunsu/Desktop/공부/졸작 논문/CCNet-main-2/access_system1/models/checkpoint_step_951.pth"
     ]
     
-    print("🚀 기본 CCNet 모델 로드 시도...")
+    print("🚀 인터랙티브 등록용 CCNet 모델 로드 시도...")
     
     for model_path in model_paths:
         if os.path.exists(model_path):
             try:
-                file_size = os.path.getsize(model_path) / (1024 * 1024)  # MB
+                file_size = os.path.getsize(model_path) / (1024 * 1024)
                 print(f"📁 모델 파일 발견: {file_size:.1f}MB")
                 
-                # 기본 CCNet 모델 로드
-                net = load_ccnet_model(model_path=model_path, num_classes=600, weight=0.8)
+                net = load_ccnet_model(model_path=model_path, num_classes=1000, weight=0.8)
                 
                 model_info = {
-                    'type': 'Basic CCNet',
+                    'type': 'Interactive CCNet',
                     'path': model_path,
                     'loaded': True,
                     'file_size_mb': round(file_size, 1),
-                    'features': 'Standard'
+                    'features': 'User-Controlled Interactive Registration',
+                    'registration_type': 'Interactive',
+                    'user_control': True
                 }
-                print("🎉 기본 CCNet 모델 로드 성공!")
+                print("🎉 인터랙티브 등록용 CCNet 모델 로드 성공!")
                 return True
                 
             except Exception as e:
                 print(f"❌ 모델 로드 실패: {e}")
                 continue
     
-    # 모든 경로 실패시
-    model_info = {
-        'type': 'No Model Loaded',
-        'path': 'None',
-        'loaded': False,
-        'error': '모든 모델 로드 시도 실패'
-    }
     raise RuntimeError("사용 가능한 모델 파일이 없습니다.")
 
 if __name__ == '__main__':
     try:
-        # 기본 CCNet 모델 로드
         load_basic_ccnet_model()
         
-        # 🔥 수정: 웹캠 초기화를 제거하고 Lazy Loading으로 변경
-        print("\n" + "="*60)
-        print("🎥 Lazy Loading 스트리밍 시스템 활성화!")
-        print("📊 웹캠은 첫 비디오 요청 시 초기화됩니다")
-        print("🔟 10장 강제 촬영 시스템 활성화!")
+        print("\n" + "="*80)
+        print("🎮 인터랙티브 등록 시스템 활성화!")
+        print("👤 사용자가 직접 품질을 확인하고 선택!")
+        print("🖼️ 10장 촬영 → 미리보기 → 선택 → 삭제/재촬영 → 최종 등록")
+        print("🎯 사용자 중심의 품질 관리!")
+        print("📱 실시간 미리보기로 최고 품질 보장!")
         print(f"🔥 {model_info['type']} 사용 중!")
-        print(f"📦 모델 크기: {model_info.get('file_size_mb', 'Unknown')}MB")
-        print(f"⚡ 특징: {model_info.get('features', 'Unknown')}")
+        print("🛡️ 관리자 패널 활성화!")
         print("🌐 웹 서버: http://localhost:5000")
-        print("🥥 CoCoNut 통합 준비 완료!")
-        print("🚀 페이지 로딩 속도 최적화!")
-        print("="*60)
+        print("✨ 완전히 새로운 등록 경험!")
+        print("="*80)
 
-        # Flask 서버 실행
         app.run(host='0.0.0.0', port=5000, debug=False, threaded=True)
         
     except Exception as e:
-        print(f"\n❌ 기본 CCNet 시스템 초기화 실패: {e}")
-        print("🔍 다음 사항을 확인해주세요:")
-        print("1. 기본 CCNet 모델 파일 경로가 올바른지 확인")
-        print("2. 필요한 라이브러리가 설치되어 있는지 확인")
-        print("3. ccnet.py 파일이 기본 버전인지 확인")
-        
+        print(f"\n❌ 인터랙티브 등록 시스템 초기화 실패: {e}")
         import sys
         sys.exit(1)
