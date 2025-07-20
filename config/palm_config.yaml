@@ -1,0 +1,45 @@
+# config/palm_config.yaml - 간단한 CoCoNut 설정
+
+# 데이터셋 설정
+Dataset:
+  type: PalmAuth
+  height: 128
+  width: 128
+  dataset_path: ./palm_data.txt
+
+# 모델 설정 (기존과 동일)
+PalmRecognizer:
+  architecture: CCNet
+  num_classes: 1000
+  com_weight: 0.8
+  learning_rate: 0.001
+  batch_size: 10
+  feature_dimension: 2048
+  load_weights_folder: /Users/kimeunsu/Desktop/공부/졸작 논문/CCNet-main-2/access_system1/models/checkpoint_step_951.pth
+
+# 연속 학습 설정
+ContinualLearner:
+  adaptation: true
+  adaptation_epochs: 2
+  sync_frequency: 10
+  enable_w2ml: true
+  hard_negative_weight: 2.0
+  hard_positive_weight: 1.5
+
+# 리플레이 버퍼
+ReplayBuffer:
+  max_buffer_size: 50
+  similarity_threshold: 0.90
+  storage_path: ./results/replay_buffer/
+
+# 손실 함수
+Loss:
+  type: CompleteW2MLSupConLoss
+  temp: 0.07
+  use_faiss_optimization: true
+  enable_w2ml_logging: true
+
+# W2ML 실험
+W2ML_Experiment:
+  enable_logging: true
+  log_frequency: 50
